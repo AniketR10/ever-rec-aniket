@@ -328,6 +328,49 @@ export class FoldersSharedService {
     }
   }
 
+  /**
+   * Adds `change` to a folder's item count in a transaction, so concurrent
+   * changes can't overwrite each other and the folder's other fields are
+   * never rewritten from a stale copy.
+   */
+  async changeFolderItems(
+    uid: string,
+    folderId: string,
+    change: number,
+    itemType: ItemType,
+  ): Promise<IDataResponse<{ id: string; items: number } | null>> {
+    if (!Number.isInteger(change)) {
+      return sendError('Change must be an integer.');
+    }
+
+    try {
+      const foldersString = itemType === 'image' ? 'folders' : 'videoFolders';
+      const folderRef = admin
+        .database()
+        .ref(`users/${uid}/${foldersString}/${folderId}`);
+      const updated = new Date().toISOString();
+
+      // Returning the null value unchanged lets Firebase retry with the
+      // server copy, instead of aborting before it has been loaded.
+      const { snapshot } = await folderRef.transaction((folder) => {
+        if (folder) {
+          folder.items = Math.max(0, (folder.items || 0) + change);
+          folder.updated = updated;
+        }
+        return folder;
+      });
+
+      if (!snapshot.exists()) {
+        return sendError('Folder not found.');
+      }
+
+      return sendResponse({ id: folderId, items: snapshot.val().items });
+    } catch (e) {
+      console.log(e);
+      return sendError('Error while trying to update folder items.');
+    }
+  }
+
   async getUserFavFolders(
     uid: string,
   ): Promise<IDataResponse<IFavoriteFolders | null>> {

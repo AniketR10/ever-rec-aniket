@@ -21,7 +21,13 @@ const changeFolderItems = async (
   return iDataResponseParser<typeof response.data>(response)?.items ?? null;
 };
 
-const updateFolderInExplorer = (folder: IDbFolderData, type: ItemType) => {
+// Updates only the count, so a newer name or color in the explorer is kept.
+const updateFolderItemsInExplorer = (
+  folderId: string,
+  items: number,
+  type: ItemType,
+) => {
+  const folder = { id: folderId, items };
   store.dispatch(
     type == 'image'
       ? PanelAC.updateExplorerFolderData({ folder })
@@ -35,7 +41,7 @@ const increaseFolderItems = async (
   index: number,
 ) => {
   const items = await changeFolderItems(folderData.id, type, index);
-  if (items !== null) updateFolderInExplorer({ ...folderData, items }, type);
+  if (items !== null) updateFolderItemsInExplorer(folderData.id, items, type);
 };
 
 const decreaseFolderItems = async (
@@ -46,7 +52,7 @@ const decreaseFolderItems = async (
   if (type == 'mixed') return;
 
   const items = await changeFolderItems(folderData.id, type, -index);
-  if (items !== null) updateFolderInExplorer({ ...folderData, items }, type);
+  if (items !== null) updateFolderItemsInExplorer(folderData.id, items, type);
 };
 
 // For callers that only have the folder id; they reload the explorer anyway.

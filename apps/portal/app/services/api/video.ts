@@ -207,7 +207,7 @@ const getVideoFavFoldersAPI = async (): Promise<
   return api.get(`api/v1/video/folders/favorite`);
 };
 
-const changeVideoFolderItemsAPI = async (
+const changeVideoFolderItemsAPI = (
   folderId: string,
   change: number,
 ): Promise<IDataResponse<{ id: string; items: number } | null>> => {

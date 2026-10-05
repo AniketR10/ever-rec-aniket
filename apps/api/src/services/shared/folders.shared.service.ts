@@ -147,35 +147,37 @@ export class FoldersSharedService {
           rawFolderData.id,
         );
 
+        // Write only the paths that change. Rewriting the whole collection
+        // would undo item count changes committed on other folders meanwhile.
+        const fileUpdates: Record<string, null> = {};
         if (filesVal) {
           idsToDelete.forEach((x) => {
             if (filesVal[x]) {
-              delete filesVal[x];
+              fileUpdates[x] = null;
             }
           });
         }
 
-        const foldersObj = folders
-          .map((x) => {
-            if (Array.isArray(x.children)) {
-              const parentIndex = x.children.findIndex(
-                (y) => y === rawFolderData.id,
-              );
-
-              if (parentIndex !== -1) {
-                x.children.splice(parentIndex, 1);
-              }
+        // Built from the raw DB values: mapDbFoldersToTreeArray replaces
+        // `children` ids with populated folders on the parsed copies.
+        const folderUpdates: Record<string, null | string[]> = {};
+        idsToDelete.forEach((id) => {
+          folderUpdates[id] = null;
+        });
+        Object.entries(foldersVal as Record<string, DbFolderDataRaw>).forEach(
+          ([id, folder]) => {
+            // In the DB, children are always folder ids
+            const children = folder.children as string[];
+            if (idsToDelete.includes(id) || !Array.isArray(children)) {
+              return;
             }
-
-            return x;
-          })
-          .filter((x) => !idsToDelete.some((y) => y === x.id))
-          .reduce((acc, val) => {
-            const id = val.id;
-            acc[id] = val;
-
-            return acc;
-          }, {});
+            if (children.includes(rawFolderData.id)) {
+              folderUpdates[`${id}/children`] = children.filter(
+                (childId) => childId !== rawFolderData.id,
+              );
+            }
+          },
+        );
 
         await this.addRemoveFavoriteService(
           uid,
@@ -184,12 +186,10 @@ export class FoldersSharedService {
           undefined,
           forceRemove,
         );
-        if (folders && filesVal) {
-          await Promise.all([
-            foldersRef.set(foldersObj),
-            filesRef.set(filesVal),
-          ]);
-        }
+        await Promise.all([
+          foldersRef.update(folderUpdates),
+          Object.keys(fileUpdates).length > 0 && filesRef.update(fileUpdates),
+        ]);
       }
     } catch (e) {
       console.log(e);

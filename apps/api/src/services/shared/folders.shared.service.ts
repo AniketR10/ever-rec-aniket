@@ -352,9 +352,10 @@ export class FoldersSharedService {
 
       // Returning the null value unchanged lets Firebase retry with the
       // server copy, instead of aborting before it has been loaded.
-      const { snapshot } = await folderRef.transaction((folder) => {
+      const { committed, snapshot } = await folderRef.transaction((folder) => {
         if (folder) {
-          folder.items = Math.max(0, (folder.items || 0) + change);
+          // Number() guards against a count stored as a string by older writes
+          folder.items = Math.max(0, (Number(folder.items) || 0) + change);
           folder.updated = updated;
         }
         return folder;
@@ -362,6 +363,11 @@ export class FoldersSharedService {
 
       if (!snapshot.exists()) {
         return sendError('Folder not found.');
+      }
+
+      // Firebase gives up after repeated conflicts; don't report that as success
+      if (!committed) {
+        return sendError('Folder is busy, please try again.');
       }
 
       return sendResponse({ id: folderId, items: snapshot.val().items });

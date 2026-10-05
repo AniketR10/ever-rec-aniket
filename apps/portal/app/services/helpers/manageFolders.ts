@@ -8,7 +8,7 @@ import { iDataResponseParser } from './iDataResponseParser';
 
 // The server applies the change atomically, so concurrent changes can't
 // overwrite each other or the folder's other fields. Returns the new count.
-const changeFolderItems = async (
+const sendFolderItemsChange = async (
   folderId: string,
   type: ItemType,
   change: number,
@@ -19,6 +19,30 @@ const changeFolderItems = async (
       : await changeVideoFolderItemsAPI(folderId, change);
 
   return iDataResponseParser<typeof response.data>(response)?.items ?? null;
+};
+
+// Changes to the same folder are sent one at a time, so their responses (and
+// the counts shown in the explorer) arrive in the order the server applied them.
+const pendingChanges = new Map<string, Promise<number | null>>();
+
+const changeFolderItems = (
+  folderId: string,
+  type: ItemType,
+  change: number,
+): Promise<number | null> => {
+  const previous = pendingChanges.get(folderId) ?? Promise.resolve(null);
+  const request = previous
+    .catch(() => null)
+    .then(() => sendFolderItemsChange(folderId, type, change));
+
+  pendingChanges.set(folderId, request);
+  const cleanUp = () => {
+    if (pendingChanges.get(folderId) === request)
+      pendingChanges.delete(folderId);
+  };
+  request.then(cleanUp, cleanUp);
+
+  return request;
 };
 
 // Updates only the count, so a newer name or color in the explorer is kept.
